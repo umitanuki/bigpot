@@ -2,7 +2,7 @@ package parser
 
 import (
 	. "launchpad.net/gocheck"
-//	"testing"
+	//	"testing"
 	"bigpot/access"
 	"bigpot/system"
 )
@@ -12,6 +12,7 @@ func init() {
 }
 
 var _ = Suite(&MySuite{})
+
 func (s *MySuite) TestBuildAlias(c *C) {
 	relation := access.Relation{
 		RelName: "mytable",

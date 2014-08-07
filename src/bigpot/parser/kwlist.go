@@ -13,8 +13,8 @@ const (
 )
 
 type keyword struct {
-	name string
-	token int
+	name   string
+	token  int
 	kwtype int
 }
 

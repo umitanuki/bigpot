@@ -69,7 +69,7 @@ func ExampleLex_consts() {
 
 func ExampleLex_sconsts() {
 	lexer := newLexer("select 'foo'  /* comment /* c2 */ */ bar " +
-					  "$$lex$$ $body$text$body$  $a$sentence$c$a$ ")
+		"$$lex$$ $body$text$body$  $a$sentence$c$a$ ")
 	lexer.lexPrintExpect(SELECT)
 	lexer.lexPrintExpect(SCONST)
 	lexer.lexPrintExpect(IDENT)

@@ -1,10 +1,10 @@
 package access
 
 import (
+	"bigpot/system"
+	"fmt"
 	. "launchpad.net/gocheck"
 	"testing"
-	"fmt"
-	"bigpot/system"
 )
 
 func init() {
@@ -16,6 +16,7 @@ func Test(t *testing.T) {
 }
 
 type AccessSuite struct{}
+
 var _ = Suite(&AccessSuite{})
 
 func (s *AccessSuite) TestHeapOpen_class(c *C) {

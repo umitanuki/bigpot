@@ -2,16 +2,16 @@ package planner
 
 import (
 	"bigpot/parser"
-//	"bigpot/system"
+	//	"bigpot/system"
 )
 
 type Node interface {
 }
 
 type PlanRoot struct {
-	CommandType		parser.CommandType
-	Plan			Node
-	RangeTables	 []*parser.RangeTblEntry
+	CommandType parser.CommandType
+	Plan        Node
+	RangeTables []*parser.RangeTblEntry
 }
 
 type Planner interface {
@@ -19,11 +19,10 @@ type Planner interface {
 }
 
 type PlannerImpl struct {
-
 }
 
 type Plan struct {
-	LeftTree Node
+	LeftTree  Node
 	RightTree Node
 }
 
@@ -31,7 +30,7 @@ type SeqScan struct {
 	Plan
 	TargetList []*parser.TargetEntry
 	RangeTable *parser.RangeTblEntry
-	rel			uint32
+	rel        uint32
 }
 
 func (planner *PlannerImpl) Plan(query parser.Query) *PlanRoot {

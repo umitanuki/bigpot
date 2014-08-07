@@ -17,9 +17,9 @@ type Scan interface {
 
 type SeqScan struct {
 	planner.SeqScan
-	relation *access.Relation
-	scan *access.RelationScan
-	executor *ExecutorImpl
+	relation   *access.Relation
+	scan       *access.RelationScan
+	executor   *ExecutorImpl
 	targetDesc *access.TupleDesc
 }
 
@@ -49,7 +49,7 @@ func (scan *SeqScan) Exec() access.Tuple {
 	tuple := scan.GetNext()
 	scan.executor.scanTuple = tuple
 	projected := scan.executor.projection(scan.SeqScan.TargetList,
-										  scan.targetDesc)
+		scan.targetDesc)
 	return projected
 }
 
@@ -69,7 +69,7 @@ func (scan *SeqScan) End() {
 // --- will be moved elsewhere
 
 func (executor *ExecutorImpl) projection(tlist []*parser.TargetEntry,
-				tlistDesc *access.TupleDesc) access.Tuple {
+	tlistDesc *access.TupleDesc) access.Tuple {
 	values := make([]string, len(tlist))
 	for i, tle := range tlist {
 		values[i] = executor.ExecExpr(tle.Expr).ToString()
@@ -77,7 +77,7 @@ func (executor *ExecutorImpl) projection(tlist []*parser.TargetEntry,
 
 	return access.Tuple(&access.CSVTuple{
 		TupleDesc: tlistDesc,
-		Values: values,
+		Values:    values,
 	})
 }
 

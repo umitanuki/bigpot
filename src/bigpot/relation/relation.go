@@ -2,4 +2,3 @@
 package relation
 
 import "bigpot/system"
-

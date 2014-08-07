@@ -11,9 +11,9 @@ type Executor interface {
 }
 
 type ExecutorImpl struct {
-	planRoot *planner.PlanRoot
+	planRoot  *planner.PlanRoot
 	TupleDesc *access.TupleDesc
-	execRoot Node
+	execRoot  Node
 	scanTuple access.Tuple
 }
 
@@ -23,7 +23,7 @@ func NewExecutor(planRoot *planner.PlanRoot) *ExecutorImpl {
 	}
 }
 
-func (exec *ExecutorImpl) initExecNode(node planner.Node) Node{
+func (exec *ExecutorImpl) initExecNode(node planner.Node) Node {
 	switch node.(type) {
 	case *planner.SeqScan:
 		scan := &SeqScan{}

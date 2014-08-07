@@ -16,7 +16,7 @@ var Int4Type Oid = 23
 var TextType Oid = 25
 var OidType Oid = 26
 
-type Datum interface{
+type Datum interface {
 	ToString() string
 	Equals(other Datum) bool
 }

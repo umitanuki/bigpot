@@ -10,8 +10,8 @@ import "bigpot/system"
 var DatabaseDir = "."
 
 type Attribute struct {
-	AttName		system.Name
-	AttType		system.Oid
+	AttName system.Name
+	AttType system.Oid
 }
 
 type TupleDesc struct {
@@ -43,22 +43,22 @@ var Anum_attribute_attnum int32 = 3
 var Anum_attribute_atttype int32 = 4
 
 type Relation struct {
-	RelId system.Oid
+	RelId   system.Oid
 	RelName system.Name
 	RelDesc *TupleDesc
 }
 
 type ScanKey struct {
 	AttNum int32
-	Val system.Datum
+	Val    system.Datum
 }
 
 type RelationScan struct {
 	Relation *Relation
-	Forward bool
+	Forward  bool
 	ScanKeys []ScanKey // non-pointer, as usually this is short life
-	Reader *csv.Reader
-	File *os.File
+	Reader   *csv.Reader
+	File     *os.File
 }
 
 type Tuple interface {
@@ -67,20 +67,20 @@ type Tuple interface {
 
 type CSVTuple struct {
 	TupleDesc *TupleDesc
-	Values []string
+	Values    []string
 }
 
 func HeapOpen(relid system.Oid) (*Relation, error) {
 	if relid == ClassRelId {
-		relation := &Relation {
-			RelId: relid,
+		relation := &Relation{
+			RelId:   relid,
 			RelName: "bp_class",
 			RelDesc: ClassTupleDesc,
 		}
 		return relation, nil
 	} else if relid == AttributeRelId {
-		relation := &Relation {
-			RelId: relid,
+		relation := &Relation{
+			RelId:   relid,
 			RelName: "bp_attribute",
 			RelDesc: AttributeTupleDesc,
 		}
@@ -107,7 +107,7 @@ func HeapOpen(relid system.Oid) (*Relation, error) {
 	defer class_scan.EndScan()
 	class_tuple, err := class_scan.Next()
 	relation := &Relation{
-		RelId: relid,
+		RelId:   relid,
 		RelName: class_tuple.Get(2).(system.Name),
 	}
 
@@ -158,17 +158,18 @@ func (relation *Relation) BeginScan(keys []ScanKey) (*RelationScan, error) {
 	}
 	scan := &RelationScan{
 		Relation: relation,
-		Forward: true,
+		Forward:  true,
 		ScanKeys: keys,
-		Reader: csv.NewReader(file),
-		File: file,
+		Reader:   csv.NewReader(file),
+		File:     file,
 	}
 
 	return scan, nil
 }
 
 func (scan *RelationScan) Next() (Tuple, error) {
-	outer: for {
+outer:
+	for {
 		values, err := scan.Reader.Read()
 		if err != nil {
 			return nil, err
@@ -180,7 +181,7 @@ func (scan *RelationScan) Next() (Tuple, error) {
 
 		tuple := Tuple(&CSVTuple{
 			TupleDesc: scan.Relation.RelDesc,
-			Values: values,
+			Values:    values,
 		})
 
 		for _, key := range scan.ScanKeys {
@@ -201,7 +202,7 @@ func (scan *RelationScan) EndScan() {
 }
 
 func (tuple *CSVTuple) Get(attnum int32) system.Datum {
-	value := tuple.Values[attnum - 1]
-	atttype := tuple.TupleDesc.Attrs[attnum - 1].AttType
+	value := tuple.Values[attnum-1]
+	atttype := tuple.TupleDesc.Attrs[attnum-1].AttType
 	return system.DatumFromString(value, atttype)
 }

@@ -1,9 +1,9 @@
 package parser
 
 import (
+	"bigpot/system"
 	. "launchpad.net/gocheck"
 	"testing"
-	"bigpot/system"
 )
 
 // Hook up gocheck into the gotest runner.
@@ -12,7 +12,9 @@ func Test(t *testing.T) {
 }
 
 type MySuite struct{}
+
 var _ = Suite(&MySuite{})
+
 func (s *MySuite) TestYYParse_1(c *C) {
 	query := "  select col1, col2 FROM tab1"
 	lexer := newLexer(query)

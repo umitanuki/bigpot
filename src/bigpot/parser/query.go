@@ -7,6 +7,7 @@ import "bigpot/access"
 import "bigpot/system"
 
 type CommandType int
+
 const (
 	CMD_SELECT = CommandType(iota)
 	CMD_INSERT
@@ -15,7 +16,7 @@ const (
 )
 
 type Alias struct {
-	AliasName string
+	AliasName   string
 	ColumnNames []string
 }
 
@@ -36,18 +37,19 @@ type ExprImpl struct {
 type Var struct {
 	ExprImpl
 	// TODO: AttributeId is int32?
-	VarNo uint16
+	VarNo    uint16
 	VarAttNo uint16
 }
 
 type TargetEntry struct {
-	Expr Expr
-	ResNo uint16
+	Expr    Expr
+	ResNo   uint16
 	ResName system.Name
 	ResJunk bool
 }
 
 type RteType int
+
 const (
 	RTE_RELATION = RteType(iota)
 	RTE_SUBQUERY
@@ -58,15 +60,15 @@ const (
 )
 
 type RangeTblEntry struct {
-	RteType	RteType
+	RteType RteType
 	/* for relation */
-	RelId system.Oid
+	RelId    system.Oid
 	RefAlias *Alias
 }
 
 type Query struct {
 	CommandType CommandType
-	TargetList []*TargetEntry
+	TargetList  []*TargetEntry
 	RangeTables []*RangeTblEntry
 }
 
@@ -75,12 +77,12 @@ type Parser interface {
 }
 
 type ParserImpl struct {
-	query string
+	query     string
 	namespace []*RangeTblEntry
 }
 
 type ParserError struct {
-	msg string
+	msg      string
 	location int
 }
 
@@ -237,7 +239,7 @@ func (rv *RangeVar) OpenRelation() (rel *access.Relation, err error) {
 		return nil, err
 	}
 	defer class_rel.Close()
-	scankeys := []access.ScanKey {
+	scankeys := []access.ScanKey{
 		{access.Anum_class_relname, system.Datum(rv.RelationName)},
 	}
 	scan, err := class_rel.BeginScan(scankeys)
