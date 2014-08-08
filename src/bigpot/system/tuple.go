@@ -1,6 +1,6 @@
 package system
 
-import(
+import (
 	"fmt"
 	"io"
 )
@@ -8,8 +8,8 @@ import(
 type AttrNumber int16
 
 type Attribute struct {
-	Name		Name
-	Type		Oid
+	Name Name
+	Type Oid
 	//Len			int
 }
 
@@ -18,8 +18,8 @@ type TupleDesc struct {
 }
 
 type HeapTuple struct {
-	Oid		Oid
-	Values	[]Datum
+	Oid    Oid
+	Values []Datum
 }
 
 func (tuple *HeapTuple) Len() int {
@@ -36,13 +36,13 @@ func (tuple *HeapTuple) Len() int {
 	// Add bitmap size
 	// TODO: bitmap type
 	// TODO: alignof()
-	if (has_null) {
+	if has_null {
 		l := len(tuple.Values)
 		sz += (l + 7) / 8
 	}
 
 	// Add Oid size
-	if (tuple.Oid != InvalidOid) {
+	if tuple.Oid != InvalidOid {
 		sz += tuple.Oid.Len()
 	}
 	return sz
@@ -67,4 +67,3 @@ func HeapTupleFromBytes(tupdesc *TupleDesc, reader io.Reader) (tuple *HeapTuple,
 	}
 	return
 }
-

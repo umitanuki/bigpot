@@ -36,7 +36,17 @@ type ItemPointer struct {
 }
 
 func (itemptr *ItemPointer) ToString() string {
-	return fmt.Sprintf("(%u,%u)", itemptr.block, itemptr.offset)
+	return fmt.Sprintf("(%d,%d)", itemptr.block, itemptr.offset)
+}
+
+func (itemptr *ItemPointer) FromString(str string) (Datum, error) {
+	var newval ItemPointer
+	num, err := fmt.Sscanf(str, "(%d,%d)", &newval.block, &newval.offset)
+
+	if err != nil || num != 2 {
+		return nil, Ereport(InvalidTextRepresentation, "invalid syntax for tid")
+	}
+	return Datum(&newval), nil
 }
 
 func (itemptr *ItemPointer) FromBytes(reader io.Reader) Datum {

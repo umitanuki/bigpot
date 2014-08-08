@@ -7,9 +7,13 @@ import (
 )
 
 type Name string
+
 const NameLen = 64
+
 type Oid uint32
+
 const InvalidOid Oid = 0
+
 type Int4 int32
 
 var BoolType Oid = 16
@@ -26,30 +30,25 @@ var XidType Oid = 28
 
 type Datum interface {
 	ToString() string
+	FromString(str string) (Datum, error)
 	FromBytes(reader io.Reader) Datum
 	Equals(other Datum) bool
 	Len() int
 }
 
 var TypeRegistry = map[Oid]Datum{
-	OidType: Oid(0),
+	OidType:  Oid(0),
 	Int4Type: Int4(0),
-	TidType: &ItemPointer{0, 0},
+	TidType:  &ItemPointer{0, 0},
 	NameType: Name(""),
 }
 
-func DatumFromString(str string, typid Oid) Datum {
-	switch typid {
-	case OidType:
-		num, _ := strconv.Atoi(str)
-		return Datum(Oid(num))
-	case NameType:
-		return Datum(Name(str))
-	case Int4Type:
-		num, _ := strconv.Atoi(str)
-		return Datum(Int4(num))
+func DatumFromString(str string, typid Oid) (Datum, error) {
+	if entry, ok := TypeRegistry[typid]; ok {
+		return entry.FromString(str)
 	}
-	return nil
+
+	panic("unknown type")
 }
 
 func DatumFromBytes(reader io.Reader, typid Oid) Datum {
@@ -62,6 +61,13 @@ func DatumFromBytes(reader io.Reader, typid Oid) Datum {
 
 func (val Name) ToString() string {
 	return string(val)
+}
+
+func (val Name) FromString(str string) (Datum, error) {
+	if len(str) > NameLen {
+		return nil, Ereport(InvalidTextRepresentation, "value too long")
+	}
+	return Datum(Name(str)), nil
 }
 
 func (val Name) FromBytes(reader io.Reader) Datum {
@@ -94,6 +100,15 @@ func (val Oid) ToString() string {
 	return strconv.Itoa(int(val))
 }
 
+func (val Oid) FromString(str string) (Datum, error) {
+	num, err := strconv.ParseUint(str, 10, 0)
+	if err != nil {
+		err2 := err.(*strconv.NumError)
+		return nil, Ereport(InvalidTextRepresentation, "%s", err2.Err)
+	}
+	return Datum(Oid(num)), nil
+}
+
 func (val Oid) FromBytes(reader io.Reader) Datum {
 	var newval Oid
 	if err := binary.Read(reader, binary.LittleEndian, &newval); err != nil {
@@ -115,6 +130,15 @@ func (val Oid) Len() int {
 
 func (val Int4) ToString() string {
 	return strconv.Itoa(int(val))
+}
+
+func (val Int4) FromString(str string) (Datum, error) {
+	num, err := strconv.ParseInt(str, 10, 0)
+	if err != nil {
+		err2 := err.(*strconv.NumError)
+		return nil, Ereport(InvalidTextRepresentation, "%s", err2.Err)
+	}
+	return Datum(Int4(num)), nil
 }
 
 func (val Int4) FromBytes(reader io.Reader) Datum {
