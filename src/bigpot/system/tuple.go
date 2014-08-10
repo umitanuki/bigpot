@@ -19,6 +19,7 @@ type TupleDesc struct {
 
 type HeapTuple struct {
 	Oid    Oid
+	Self   ItemPointer
 	Values []Datum
 }
 
