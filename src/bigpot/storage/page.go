@@ -2,17 +2,31 @@ package storage
 
 import (
 	"encoding/binary"
+	"unsafe"
 
 	"bigpot/system"
 )
 
-const pageChecksum = 10
-const pageLower = 12
-const pageUpper = 16
-const pageSpecial = 20
-const pageVersion = 24
-const pagePruneXid = 26
-const pageHeaderSize = 30
+type LocationIndex uint16
+type pageHeaderLayout struct {
+	lsn system.Lsn
+	checksum, flags uint16
+	lower, upper, special LocationIndex
+	pagesize_version uint16
+	prune_xid system.Xid
+	linp ItemId
+}
+
+var pagelayout pageHeaderLayout
+
+const pageLsn = unsafe.Offsetof(pagelayout.lsn)
+const pageChecksum = unsafe.Offsetof(pagelayout.checksum)
+const pageLower = unsafe.Offsetof(pagelayout.lower)
+const pageUpper = unsafe.Offsetof(pagelayout.upper)
+const pageSpecial = unsafe.Offsetof(pagelayout.special)
+const pageVersion = unsafe.Offsetof(pagelayout.pagesize_version)
+const pagePruneXid = unsafe.Offsetof(pagelayout.prune_xid)
+const pageHeaderSize = unsafe.Offsetof(pagelayout.linp)
 
 type Page struct {
 	bytes		[]byte
@@ -28,35 +42,35 @@ func NewPage(b []byte) *Page {
 }
 
 func (page *Page) Lsn() system.Lsn {
-	return system.Lsn(binary.LittleEndian.Uint64(page.bytes))
+	return system.Lsn(binary.LittleEndian.Uint64(page.bytes[pageLsn:]))
 }
 
 func (page *Page) SetLsn(lsn system.Lsn) {
 	binary.LittleEndian.PutUint64(page.bytes, uint64(lsn))
 }
 
-func (page *Page) Lower() uint {
-	return uint(binary.LittleEndian.Uint32(page.bytes[pageLower:]))
+func (page *Page) Lower() uint16 {
+	return uint16(binary.LittleEndian.Uint16(page.bytes[pageLower:]))
 }
 
-func (page *Page) SetLower(lower uint) {
-	binary.LittleEndian.PutUint32(page.bytes[pageLower:], uint32(lower))
+func (page *Page) SetLower(lower uint16) {
+	binary.LittleEndian.PutUint16(page.bytes[pageLower:], lower)
 }
 
-func (page *Page) Upper() uint {
-	return uint(binary.LittleEndian.Uint32(page.bytes[pageUpper:]))
+func (page *Page) Upper() uint16 {
+	return uint16(binary.LittleEndian.Uint16(page.bytes[pageUpper:]))
 }
 
-func (page *Page) SetUpper(upper uint) {
-	binary.LittleEndian.PutUint32(page.bytes[pageUpper:], uint32(upper))
+func (page *Page) SetUpper(upper uint16) {
+	binary.LittleEndian.PutUint16(page.bytes[pageUpper:], uint16(upper))
 }
 
-func (page *Page) Special() uint {
-	return uint(binary.LittleEndian.Uint32(page.bytes[pageSpecial:]))
+func (page *Page) Special() uint16 {
+	return uint16(binary.LittleEndian.Uint16(page.bytes[pageSpecial:]))
 }
 
-func (page *Page) SetSpecial(special uint) {
-	binary.LittleEndian.PutUint32(page.bytes[pageSpecial:], uint32(special))
+func (page *Page) SetSpecial(special uint16) {
+	binary.LittleEndian.PutUint16(page.bytes[pageSpecial:], uint16(special))
 }
 
 func (page *Page) IsNew() bool {
@@ -64,7 +78,7 @@ func (page *Page) IsNew() bool {
 }
 
 func (page *Page) IsEmpty() bool {
-	return page.Lower() <= pageHeaderSize
+	return uintptr(page.Lower()) <= pageHeaderSize
 }
 
 func (page *Page) IsValid() bool {
@@ -72,7 +86,7 @@ func (page *Page) IsValid() bool {
 }
 
 func (page *Page) Item(offset system.OffsetNumber) *ItemId {
-	addr := pageHeaderSize + offset * 4
+	addr := pageHeaderSize + uintptr(offset) * 4
 	return NewItemId(page.bytes[addr:])
 }
 

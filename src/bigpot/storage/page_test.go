@@ -25,8 +25,8 @@ func (s *MySuite) TestPage(c *C) {
 
 	page.SetLower(128)
 	page.SetUpper(1024)
-	c.Check(page.Lower(), Equals, uint(128))
-	c.Check(page.Upper(), Equals, uint(1024))
+	c.Check(page.Lower(), Equals, uint16(128))
+	c.Check(page.Upper(), Equals, uint16(1024))
 	c.Check(page.IsEmpty(), Equals, false)
 
 	page.SetLower(10)
