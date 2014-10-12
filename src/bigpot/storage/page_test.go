@@ -2,6 +2,7 @@ package storage
 
 import (
 	//"bytes"
+	"os"
 	. "launchpad.net/gocheck"
 	"testing"
 
@@ -33,6 +34,19 @@ func (s *MySuite) TestPage(c *C) {
 	c.Check(page.IsEmpty(), Equals, true)
 
 	c.Check(page.IsNew(), Equals, false)
+
+	fout, _ := os.Create("/tmp/foo")
+	fout.Write(b)
+	fout.Close()
+
+	fin, _ := os.Open("/tmp/foo")
+	b2 := make([]byte, system.BlockSize)
+	fin.Read(b2)
+	fin.Close()
+	page2 := NewPage(b2)
+
+	c.Check(page2.Lower(), Equals, uint16(10))
+	c.Check(page2.Upper(), Equals, uint16(1024))
 }
 
 func (s *MySuite) TestItemId(c *C) {

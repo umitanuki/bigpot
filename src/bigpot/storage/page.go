@@ -7,28 +7,20 @@ import (
 	"bigpot/system"
 )
 
-type LocationIndex uint16
-type pageHeaderLayout struct {
+type pageHeader struct {
 	lsn system.Lsn
 	checksum, flags uint16
-	lower, upper, special LocationIndex
+	lower, upper, special uint16 // TODO: LocationIndex (15bit)
 	pagesize_version uint16
 	prune_xid system.Xid
 	linp ItemId
 }
 
-var pagelayout pageHeaderLayout
-
-const pageLsn = unsafe.Offsetof(pagelayout.lsn)
-const pageChecksum = unsafe.Offsetof(pagelayout.checksum)
-const pageLower = unsafe.Offsetof(pagelayout.lower)
-const pageUpper = unsafe.Offsetof(pagelayout.upper)
-const pageSpecial = unsafe.Offsetof(pagelayout.special)
-const pageVersion = unsafe.Offsetof(pagelayout.pagesize_version)
-const pagePruneXid = unsafe.Offsetof(pagelayout.prune_xid)
-const pageHeaderSize = unsafe.Offsetof(pagelayout.linp)
+var pagelayour pageHeader
+const pageHeaderSize = unsafe.Offsetof(pagelayour.linp)
 
 type Page struct {
+	header		*pageHeader
 	bytes		[]byte
 }
 
@@ -36,41 +28,43 @@ func NewPage(b []byte) *Page {
 	if len(b) != system.BlockSize {
 		panic("invalid block bytes")
 	}
+	header := *(**pageHeader)(unsafe.Pointer(&b))
 	return &Page{
+		header: header,
 		bytes: b,
 	}
 }
 
 func (page *Page) Lsn() system.Lsn {
-	return system.Lsn(binary.LittleEndian.Uint64(page.bytes[pageLsn:]))
+	return page.header.lsn
 }
 
 func (page *Page) SetLsn(lsn system.Lsn) {
-	binary.LittleEndian.PutUint64(page.bytes, uint64(lsn))
+	page.header.lsn = lsn
 }
 
 func (page *Page) Lower() uint16 {
-	return uint16(binary.LittleEndian.Uint16(page.bytes[pageLower:]))
+	return page.header.lower
 }
 
 func (page *Page) SetLower(lower uint16) {
-	binary.LittleEndian.PutUint16(page.bytes[pageLower:], lower)
+	page.header.lower = lower
 }
 
 func (page *Page) Upper() uint16 {
-	return uint16(binary.LittleEndian.Uint16(page.bytes[pageUpper:]))
+	return page.header.upper
 }
 
 func (page *Page) SetUpper(upper uint16) {
-	binary.LittleEndian.PutUint16(page.bytes[pageUpper:], uint16(upper))
+	page.header.upper = upper
 }
 
 func (page *Page) Special() uint16 {
-	return uint16(binary.LittleEndian.Uint16(page.bytes[pageSpecial:]))
+	return page.header.special
 }
 
 func (page *Page) SetSpecial(special uint16) {
-	binary.LittleEndian.PutUint16(page.bytes[pageSpecial:], uint16(special))
+	page.header.special = special
 }
 
 func (page *Page) IsNew() bool {
