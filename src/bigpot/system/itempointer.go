@@ -29,6 +29,10 @@ func (offset OffsetNumber) IsValid() bool {
 	return offset != InvalidOffsetNumber && offset <= MaxOffsetNumber
 }
 
+func (offset OffsetNumber) Next() OffsetNumber {
+	return offset + 1
+}
+
 // ItemPointer
 type ItemPointer struct {
 	block  BlockNumber

@@ -54,16 +54,44 @@ func (s *MySuite) TestPage(c *C) {
 
 	c.Check(page2.Lower(), Equals, uint16(128))
 	c.Check(page2.Upper(), Equals, uint16(1024))
+
+	// Test for Add/Item
+	// TODO: overwrite case
+	page3 := NewPage(make([]byte, system.BlockSize))
+	page3.Init(0)
+	item1 := make([]byte, 128)
+	item1[0] = 0xbe
+	item1[1] = 0xde
+	item2 := make([]byte, 256)
+	item2[254] = 0xaa
+	item2[255] = 0xab
+	offset1 := page3.AddItem(item1, system.InvalidOffsetNumber, false, true)
+	offset2 := page3.AddItem(item2, system.InvalidOffsetNumber, false, true)
+	c.Check(offset1, Equals, system.OffsetNumber(1))
+	c.Check(offset2, Equals, system.OffsetNumber(2))
+	itemId1 := page3.ItemId(offset1)
+	item1 = page3.Item(itemId1)
+	c.Check(item1[0], Equals, byte(0xbe))
+	c.Check(item1[1], Equals, byte(0xde))
+	itemId2 := page3.ItemId(offset2)
+	item2 = page3.Item(itemId2)
+	c.Check(item2[254], Equals, byte(0xaa))
+	c.Check(item2[255], Equals, byte(0xab))
 }
 
 func (s *MySuite) TestItemId(c *C) {
 	itid := ItemId(0)
 
-	itid.SetFlags(ItemIdUsed)
+	itid.SetFlags(ItemIdUnused)
 	itid.SetLength(42)
 	itid.SetOffset(16)
 
-	c.Check(itid.Flags(), Equals, ItemIdUsed)
+	c.Check(itid.Flags(), Equals, ItemIdUnused)
 	c.Check(itid.Length(), Equals, uint(42))
 	c.Check(itid.Offset(), Equals, uint(16))
+
+	itid.SetNormal(system.BlockSize - 128, 128)
+	c.Check(itid.Flags(), Equals, ItemIdNormal)
+	c.Check(itid.Length(), Equals, uint(128))
+	c.Check(itid.Offset(), Equals, uint(system.BlockSize - 128))
 }
