@@ -2,8 +2,8 @@ package storage
 
 import (
 	//"bytes"
-	"os"
 	. "launchpad.net/gocheck"
+	"os"
 	"testing"
 
 	"bigpot/system"
@@ -82,16 +82,16 @@ func (s *MySuite) TestPage(c *C) {
 func (s *MySuite) TestItemId(c *C) {
 	itid := ItemId(0)
 
-	itid.SetFlags(ItemIdUnused)
+	itid.SetFlags(itemIdUnused)
 	itid.SetLength(42)
 	itid.SetOffset(16)
 
-	c.Check(itid.Flags(), Equals, ItemIdUnused)
+	c.Check(itid.Flags(), Equals, itemIdUnused)
 	c.Check(itid.Length(), Equals, uint(42))
 	c.Check(itid.Offset(), Equals, uint(16))
 
-	itid.SetNormal(system.BlockSize - 128, 128)
-	c.Check(itid.Flags(), Equals, ItemIdNormal)
+	itid.SetNormal(system.BlockSize-128, 128)
+	c.Check(itid.Flags(), Equals, itemIdNormal)
 	c.Check(itid.Length(), Equals, uint(128))
-	c.Check(itid.Offset(), Equals, uint(system.BlockSize - 128))
+	c.Check(itid.Offset(), Equals, uint(system.BlockSize-128))
 }

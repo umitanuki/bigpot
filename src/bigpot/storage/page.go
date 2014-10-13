@@ -10,44 +10,89 @@ import (
 )
 
 type pageHeader struct {
-	lsn system.Lsn
-	checksum, flags uint16
+	lsn                   system.Lsn
+	checksum, flags       uint16
 	lower, upper, special uint16 // TODO: LocationIndex (15bit)
-	pagesize_version uint16
-	prune_xid system.Xid
-	linp ItemId
+	pagesize_version      uint16
+	prune_xid             system.Xid
+	linp                  ItemId
 }
 
-var pagelayour pageHeader
-
 // line pointer(s) do not count as part of header
-const sizeOfPageHeader = uint16(unsafe.Offsetof(pagelayour.linp))
+const sizeOfPageHeader = uint16(unsafe.Offsetof(pageHeader{}.linp))
 const LayoutVersion = uint16(4)
 
-/*
- * pageHeader.flags contains the following flag bits.  Undefined bits are initialized
- * to zero and may be used in the future.
- *
- * pageHasFreeLines is set if there are any LP_UNUSED line pointers before
- * lower.  This should be considered a hint rather than the truth, since
- * changes to it are not WAL-logged.
- *
- * pageFull is set if an UPDATE doesn't find enough free space in the
- * page for its new tuple version; this suggests that a prune is needed.
- * Again, this is just a hint.
- */
+// pageHeader.flags contains the following flag bits.  Undefined bits are initialized
+// to zero and may be used in the future.
+//
+// pageHasFreeLines is set if there are any itemIdUnused line pointers before
+// lower.  This should be considered a hint rather than the truth, since
+// changes to it are not WAL-logged.
+//
+// pageFull is set if an UPDATE doesn't find enough free space in the
+// page for its new tuple version; this suggests that a prune is needed.
+// Again, this is just a hint.
 const (
-	pageHasFreeLines = uint16(0x0001)
-	pageFull = uint16(0x0002)
-	pageAllVisible = uint16(0x0004)
+	pageHasFreeLines  = uint16(0x0001)
+	pageFull          = uint16(0x0002)
+	pageAllVisible    = uint16(0x0004)
 	pageValidFlagBits = uint16(0x0007)
 )
 
 var pageZero = make([]byte, system.BlockSize)
 
+// A postgres disk page is an abstraction layered on top of a postgres
+// disk block (which is simply a unit of i/o, see block.h).
+//
+// specifically, while a disk block can be unformatted, a postgres
+// disk page is always a slotted page of the form:
+//
+// +----------------+---------------------------------+
+// | PageHeaderData | linp1 linp2 linp3 ...           |
+// +-----------+----+---------------------------------+
+// | ... linpN |                                      |
+// +-----------+--------------------------------------+
+// |           ^ pd_lower                             |
+// |                                                  |
+// |             v pd_upper                           |
+// +-------------+------------------------------------+
+// |             | tupleN ...                         |
+// +-------------+------------------+-----------------+
+// |       ... tuple3 tuple2 tuple1 | "special space" |
+// +--------------------------------+-----------------+
+//                                  ^ pd_special
+//
+// a page is full when nothing can be added between pd_lower and
+// pd_upper.
+//
+// all blocks written out by an access method must be disk pages.
+//
+// EXCEPTIONS:
+//
+// obviously, a page is not formatted before it is initialized by
+// a call to PageInit.
+//
+// NOTES:
+//
+// linp1..N form an ItemId array.  ItemPointers point into this array
+// rather than pointing directly to a tuple.  Note that OffsetNumbers
+// conventionally start at 1, not 0.
+//
+// tuple1..N are added "backwards" on the page.  because a tuple's
+// ItemPointer points to its ItemId entry rather than its actual
+// byte-offset position, tuples can be physically shuffled on a page
+// whenever the need arises.
+//
+// AM-generic per-page information is kept in PageHeaderData.
+//
+// AM-specific per-page data (if any) is kept in the area marked "special
+// space"; each AM has an "opaque" structure defined somewhere that is
+// stored as the page trailer.	an access method should always
+// initialize its pages with PageInit and then set its own opaque
+// fields.
 type Page struct {
-	header		*pageHeader
-	bytes		[]byte
+	header *pageHeader
+	bytes  []byte
 }
 
 func NewPage(b []byte) *Page {
@@ -57,7 +102,7 @@ func NewPage(b []byte) *Page {
 	header := (*pageHeader)(unsafe.Pointer(&b[0]))
 	return &Page{
 		header: header,
-		bytes: b,
+		bytes:  b,
 	}
 }
 
@@ -87,6 +132,44 @@ func (page *Page) SetHasFreeLinePointers() {
 
 func (page *Page) ClearHasFreeLinePointers() {
 	page.header.flags &= ^pageHasFreeLines
+}
+
+func (page *Page) IsFull() bool {
+	return (page.header.flags & pageFull) != 0
+}
+
+func (page *Page) SetFull() {
+	page.header.flags |= pageFull
+}
+
+func (page *Page) ClearFull() {
+	page.header.flags &= ^pageFull
+}
+
+func (page *Page) IsAllVisible() bool {
+	return (page.header.flags & pageAllVisible) != 0
+}
+
+func (page *Page) SetAllVisible() {
+	page.header.flags |= pageAllVisible
+}
+
+func (page *Page) ClearAllVisible() {
+	page.header.flags &= ^pageAllVisible
+}
+
+func (page *Page) IsPrunable(oldestxmin system.Xid) bool {
+	if !oldestxmin.IsNormal() {
+		panic("invalid argument")
+	}
+	if page.header.prune_xid.IsValid() {
+		return page.header.prune_xid.Precedes(oldestxmin)
+	}
+	return false
+}
+
+func (page *Page) ClearPrunable() {
+	page.header.prune_xid = system.InvalidXid
 }
 
 func (page *Page) Lower() uint16 {
@@ -122,10 +205,10 @@ func (page *Page) PageLayourVersion() uint16 {
 }
 
 func (page *Page) SetPageSizeAndVersion(size, version uint16) {
-	if size & uint16(0xff00) != size {
+	if size&uint16(0xff00) != size {
 		panic("invalid size")
 	}
-	if version & uint16(0x00ff) != version {
+	if version&uint16(0x00ff) != version {
 		panic("invalid version")
 	}
 	page.header.pagesize_version = size | version
@@ -145,7 +228,7 @@ func (page *Page) IsValid() bool {
 
 // Returns an item identifier of a page.
 func (page *Page) ItemId(offset system.OffsetNumber) *ItemId {
-	addr := sizeOfPageHeader + uint16(offset-1) * uint16(unsafe.Sizeof(ItemId(0)))
+	addr := sizeOfPageHeader + uint16(offset-1)*uint16(unsafe.Sizeof(ItemId(0)))
 	return (*ItemId)(unsafe.Pointer(&page.bytes[addr]))
 }
 
@@ -182,9 +265,9 @@ func (page *Page) AddItem(item []byte, offset system.OffsetNumber, overwrite, is
 		page.Lower() > page.Upper() ||
 		page.Upper() > page.Special() ||
 		page.Special() > system.BlockSize {
-			log.Panicf("corrupted page pointers: lower = %d, upper = %d, special = %d",
-					   page.Lower(), page.Upper(), page.Special())
-		}
+		log.Panicf("corrupted page pointers: lower = %d, upper = %d, special = %d",
+			page.Lower(), page.Upper(), page.Special())
+	}
 
 	// Select offset to place the new item at
 	limit := page.MaxOffsetNumber().Next()
@@ -259,9 +342,9 @@ func (page *Page) AddItem(item []byte, offset system.OffsetNumber, overwrite, is
 		base := uintptr(unsafe.Pointer(&page.bytes[0]))
 		destStart := uintptr(unsafe.Pointer(destItemId)) - base
 		srcStart := uintptr(unsafe.Pointer(itemId)) - base
-		copyLen := uintptr(limit - offset) * unsafe.Sizeof(ItemId(0))
-		dest := page.bytes[destStart:destStart+copyLen]
-		src := page.bytes[srcStart:srcStart+copyLen]
+		copyLen := uintptr(limit-offset) * unsafe.Sizeof(ItemId(0))
+		dest := page.bytes[destStart : destStart+copyLen]
+		src := page.bytes[srcStart : srcStart+copyLen]
 		copy(dest, src)
 	}
 
@@ -285,7 +368,22 @@ func (page *Page) AddItem(item []byte, offset system.OffsetNumber, overwrite, is
 func (page *Page) Item(itemId *ItemId) []byte {
 	offset := itemId.Offset()
 	length := itemId.Length()
-	return page.bytes[offset:offset+length]
+	return page.bytes[offset : offset+length]
+}
+
+// Returns the size of the free (allocatable) space on a page,
+// reduced by the space needed for a new line pointer.
+// Note: this should usually only be used on index pages.  Use
+// Page.HeapFreeSpace on heap pages.
+func (page *Page) FreeSpace() uint {
+	space := int(page.Upper()) - int(page.Lower())
+
+	if space < int(unsafe.Sizeof(ItemId(0))) {
+		return 0
+	}
+	space -= int(unsafe.Sizeof(ItemId(0)))
+
+	return uint(space)
 }
 
 // An item pointer (also called line pointer) on a buffer page
@@ -296,10 +394,10 @@ func (page *Page) Item(itemId *ItemId) []byte {
 type ItemId uint32
 
 const (
-	ItemIdUnused = uint(0)		// unused (should always have length == 0
-	ItemIdNormal = uint(1)		// used (should always have length > 0
-	ItemIdRedirect = uint(2)	// HOT redirect (should have length == 0)j
-	ItemIdDead = uint(3)		// dead, may or may not have storage
+	itemIdUnused   = uint(0) // unused (should always have length == 0
+	itemIdNormal   = uint(1) // used (should always have length > 0
+	itemIdRedirect = uint(2) // HOT redirect (should have length == 0)j
+	itemIdDead     = uint(3) // dead, may or may not have storage
 )
 
 func NewItemId(b []byte) *ItemId {
@@ -336,7 +434,22 @@ func (itid *ItemId) SetLength(length uint) {
 
 // True iff item identifier is in use.
 func (itid *ItemId) IsUsed() bool {
-	return itid.Flags() != ItemIdUnused
+	return itid.Flags() != itemIdUnused
+}
+
+// True iff item identifier is in state NORMAL.
+func (itid *ItemId) IsNormal() bool {
+	return itid.Flags() == itemIdNormal
+}
+
+// True iff item identifier is in state REDIRECT.
+func (itid *ItemId) IsRedirected() bool {
+	return itid.Flags() == itemIdRedirect
+}
+
+// True iff item identifier is in state DEAD.
+func (itid *ItemId) IsDead() bool {
+	return itid.Flags() == itemIdDead
 }
 
 // True iff item identifier has associated storage.
@@ -344,10 +457,41 @@ func (itid *ItemId) HasStorage() bool {
 	return itid.Length() != 0
 }
 
+// Set the item identifier to be UNUSED, with no storage.
+func (itid *ItemId) SetUnused() {
+	itid.SetFlags(itemIdUnused)
+	itid.SetOffset(0)
+	itid.SetLength(0)
+}
+
+// Set the item identifier to be NORMAL, with the specified storage.
 func (itid *ItemId) SetNormal(offset, length uint) {
-	itid.SetFlags(ItemIdNormal)
+	itid.SetFlags(itemIdNormal)
 	itid.SetOffset(offset)
 	itid.SetLength(length)
+}
+
+// Set the item identifier to be REDIRECT, with the specified link.
+func (itid *ItemId) SetRedirect(link uint) {
+	itid.SetFlags(itemIdRedirect)
+	itid.SetOffset(link)
+	itid.SetLength(0)
+}
+
+// Set the item identifier to be DEAD, with no storage.
+func (itid *ItemId) SetDead() {
+	itid.SetFlags(itemIdDead)
+	itid.SetOffset(0)
+	itid.SetLength(0)
+}
+
+// Set the item identifier to be DEAD, keeping its existing storage.
+//
+// Note: in indexes, this is used as if it were a hint-bit mechanism;
+// we trust that multiple processors can do this in parallel and get
+// the same result.
+func (itid *ItemId) MarkDead() {
+	itid.SetFlags(itemIdDead)
 }
 
 func (itid *ItemId) String() string {
