@@ -17,7 +17,12 @@ type pageHeader struct {
 }
 
 var pagelayour pageHeader
-const pageHeaderSize = unsafe.Offsetof(pagelayour.linp)
+
+// line pointer(s) do not count as part of header
+const sizeOfPageHeader = unsafe.Offsetof(pagelayour.linp)
+const LayoutVersion = uint16(4)
+
+var pageZero = make([]byte, system.BlockSize)
 
 type Page struct {
 	header		*pageHeader
@@ -41,6 +46,14 @@ func (page *Page) Lsn() system.Lsn {
 
 func (page *Page) SetLsn(lsn system.Lsn) {
 	page.header.lsn = lsn
+}
+
+func (page *Page) Flags() uint16 {
+	return page.header.flags
+}
+
+func (page *Page) SetFlags(flags uint16) {
+	page.header.flags = flags
 }
 
 func (page *Page) Lower() uint16 {
@@ -67,21 +80,52 @@ func (page *Page) SetSpecial(special uint16) {
 	page.header.special = special
 }
 
+func (page *Page) PageSize() uint16 {
+	return page.header.pagesize_version & uint16(0xff00)
+}
+
+func (page *Page) PageLayourVersion() uint16 {
+	return page.header.pagesize_version & uint16(0x00ff)
+}
+
+func (page *Page) SetPageSizeAndVersion(size, version uint16) {
+	if size & uint16(0xff00) != size {
+		panic("invalid size")
+	}
+	if version & uint16(0x00ff) != version {
+		panic("invalid version")
+	}
+	page.header.pagesize_version = size | version
+}
+
 func (page *Page) IsNew() bool {
 	return page.Upper() == 0
 }
 
 func (page *Page) IsEmpty() bool {
-	return uintptr(page.Lower()) <= pageHeaderSize
+	return uintptr(page.Lower()) <= sizeOfPageHeader
 }
 
 func (page *Page) IsValid() bool {
 	return page.bytes != nil
 }
 
-func (page *Page) Item(offset system.OffsetNumber) *ItemId {
-	addr := pageHeaderSize + uintptr(offset) * 4
+// Returns an item identifier of a page.
+func (page *Page) ItemId(offset system.OffsetNumber) *ItemId {
+	addr := sizeOfPageHeader + uintptr(offset) * unsafe.Sizeof(offset)
 	return NewItemId(page.bytes[addr:])
+}
+
+// Initializes the content of a page.
+func (page *Page) Init(specialSize uintptr) {
+	copy(page.bytes, pageZero)
+
+	specialSize = system.MaxAlign(specialSize)
+	offsetSpecial := uint16(system.BlockSize - specialSize)
+	page.SetLower(uint16(sizeOfPageHeader))
+	page.SetUpper(offsetSpecial)
+	page.SetSpecial(offsetSpecial)
+	page.SetPageSizeAndVersion(system.BlockSize, LayoutVersion)
 }
 
 // An item pointer (also called line pointer) on a buffer page

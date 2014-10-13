@@ -24,14 +24,18 @@ func (s *MySuite) TestPage(c *C) {
 
 	c.Check(page.IsNew(), Equals, true)
 
+	page.Init(0)
+
+	c.Check(page.IsValid(), Equals, true)
+	c.Check(page.IsEmpty(), Equals, true)
+	c.Check(page.PageSize(), Equals, uint16(system.BlockSize))
+	c.Check(page.PageLayourVersion(), Equals, uint16(4))
+
 	page.SetLower(128)
 	page.SetUpper(1024)
 	c.Check(page.Lower(), Equals, uint16(128))
 	c.Check(page.Upper(), Equals, uint16(1024))
 	c.Check(page.IsEmpty(), Equals, false)
-
-	page.SetLower(10)
-	c.Check(page.IsEmpty(), Equals, true)
 
 	c.Check(page.IsNew(), Equals, false)
 
@@ -45,7 +49,10 @@ func (s *MySuite) TestPage(c *C) {
 	fin.Close()
 	page2 := NewPage(b2)
 
-	c.Check(page2.Lower(), Equals, uint16(10))
+	c.Check(page2.PageSize(), Equals, uint16(system.BlockSize))
+	c.Check(page2.PageLayourVersion(), Equals, uint16(4))
+
+	c.Check(page2.Lower(), Equals, uint16(128))
 	c.Check(page2.Upper(), Equals, uint16(1024))
 }
 
