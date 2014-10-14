@@ -29,6 +29,7 @@ type HeapTupleHeader struct {
 }
 
 const (
+	// information stored in infomask
 	heapHasNull        = 0x0001
 	heapHasVarWidth    = 0x0002
 	heapHasExternal    = 0x0004
@@ -39,7 +40,7 @@ const (
 	heapXmaxLockOnly   = 0x0080
 	heapXmaxShrLock    = heapXmaxExclLock | heapXmaxKeyshrLock
 	heapLockMask       = heapXmaxShrLock | heapXmaxExclLock | heapXmaxKeyshrLock
-	heapXminCommitted  = 0x01000
+	heapXminCommitted  = 0x0100
 	heapXminInvalid    = 0x0200
 	heapXmaxCommitted  = 0x0400
 	heapXmaxInvalid    = 0x0800
@@ -48,6 +49,9 @@ const (
 	heapMovedOff       = 0x4000
 	heapMovedIn        = 0x8000
 	heapXactMask       = 0xfff0
+
+	// information stored in infomask2
+	heapNattsMask      = 0x07ff
 )
 
 func NewHeapTuple(bytes []byte, tid system.ItemPointer) *HeapTuple {
@@ -93,6 +97,14 @@ func (htup *HeapTupleHeader) Oid() system.Oid {
 	return system.InvalidOid
 }
 
+func (htup *HeapTupleHeader) Natts() system.AttrNumber {
+	return system.AttrNumber(htup.infomask2 & uint16(heapNattsMask))
+}
+
+func (htup *HeapTupleHeader) SetNatts(attnum system.AttrNumber) {
+	htup.infomask2 = (htup.infomask2 & ^uint16(heapNattsMask)) | uint16(attnum)
+}
+
 func (tuple *HeapTuple) Get(attnum system.AttrNumber) system.Datum {
 	if attnum <= 0 {
 		switch attnum {
@@ -118,6 +130,69 @@ func (tuple *HeapTuple) Get(attnum system.AttrNumber) system.Datum {
 	return nil
 }
 
-func FormHeapTuple(values []system.Datum, tupdesc TupleDesc) *HeapTuple {
-	return nil
+func bitmapLength(n int) int {
+	return (n + 7) / 8
+}
+
+func computeHeapDataSize(values []system.Datum, tupdesc *TupleDesc) uintptr {
+	var data_length uintptr = 0
+
+	for i := 0; i < len(tupdesc.Attrs); i++ {
+		val := values[i]
+
+		if val == nil {
+			continue
+		}
+
+		// TODO:
+	}
+
+	return data_length
+}
+
+func (htup *HeapTupleHeader) fill(values []system.Datum, tupdesc *TupleDesc) {
+
+}
+
+func FormHeapTuple(values []system.Datum, tupdesc *TupleDesc) *HeapTuple {
+	natts := len(tupdesc.Attrs)
+	hasnull := false
+	for _, value := range values {
+		if value == nil {
+			hasnull = true
+		//} else if att.attlen == -1
+		// TODO: flatten toast value
+		}
+	}
+
+	length := unsafe.Offsetof(HeapTupleHeader{}.bits)
+
+	if hasnull {
+		length += uintptr(bitmapLength(natts))
+	}
+	if tupdesc.hasOid {
+		length += unsafe.Sizeof(system.Oid(0))
+	}
+
+	length = system.MaxAlign(length)
+	hoff := uint8(length)
+
+	data_len := computeHeapDataSize(values, tupdesc)
+	length += data_len
+
+	tuple_data := make([]byte, length)
+	tuple := NewHeapTuple(tuple_data, system.InvalidItemPointer)
+	tuple.SetTableOid(system.InvalidOid)
+
+	td := tuple.data
+	td.SetNatts(system.AttrNumber(natts))
+	td.hoff = hoff
+
+	if tupdesc.hasOid {
+		td.infomask = heapHasOid
+	}
+
+	td.fill(values, tupdesc)
+
+	return tuple
 }

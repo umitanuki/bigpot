@@ -4,28 +4,32 @@ import (
 	"bigpot/system"
 )
 
+var ClassRelId system.Oid = 1259
 var ClassTupleDesc = &TupleDesc{
-	[]*Attribute{
+	Attrs: []*Attribute{
 		{"relname", system.NameType},
 		{"relfilenode", system.OidType},
 	},
+	typid: ClassRelId,
+	hasOid: true,
 }
-var ClassRelId system.Oid = 1259
 
 const (
 	Anum_class_relname     = 1
 	Anum_clasS_relfilenode = 2
 )
 
+var AttributeRelId system.Oid = 1249
 var AttributeTupleDesc = &TupleDesc{
-	[]*Attribute{
+	Attrs: []*Attribute{
 		{"attrelid", system.OidType},
 		{"attname", system.NameType},
 		{"attnum", system.Int4Type},
 		{"atttypid", system.OidType},
 	},
+	typid: AttributeRelId,
+	hasOid: false,
 }
-var AttributeRelId system.Oid = 1249
 
 const (
 	Anum_attribute_attrelid = 1

@@ -39,6 +39,8 @@ type ItemPointer struct {
 	offset OffsetNumber
 }
 
+var InvalidItemPointer = ItemPointer{InvalidBlockNumber, InvalidOffsetNumber}
+
 func (itemptr *ItemPointer) ToString() string {
 	return fmt.Sprintf("(%d,%d)", itemptr.block, itemptr.offset)
 }

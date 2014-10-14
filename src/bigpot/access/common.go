@@ -23,7 +23,9 @@ type Attribute struct {
 }
 
 type TupleDesc struct {
-	Attrs []*Attribute
+	Attrs  []*Attribute
+	typid  system.Oid
+	hasOid bool
 }
 
 type ScanKey struct {
