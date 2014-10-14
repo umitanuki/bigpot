@@ -72,20 +72,8 @@ var TypeRegistry = map[Oid]*TypeInfo{
 	},
 }
 
-const (
-	TypeFixed   = iota
-	TypeVarlena = iota
-	TypeCString = iota
-)
-
-func (typ *TypeInfo) Category() int {
-	if typ.Len == -2 {
-		return TypeCString
-	} else if typ.Len == -1 {
-		return TypeVarlena
-	} else {
-		return TypeFixed
-	}
+func (typ *TypeInfo) IsVarlen() bool {
+	return typ.Len == -1
 }
 
 func DatumFromString(str string, typid Oid) (Datum, error) {

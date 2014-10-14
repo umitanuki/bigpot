@@ -132,13 +132,10 @@ func (tuple *HeapTuple) Fetch(attnum system.AttrNumber) system.Datum {
 		// TODO: null bitmap
 		for i := system.AttrNumber(1); i < attnum; i++ {
 			attr := tuple.tupdesc.Attrs[i-1]
-			switch attr.Type.Category() {
-			case system.TypeFixed:
+			if attr.Type.IsVarlen() {
+				// TODO:
+			} else {
 				offset += int(attr.Type.Len)
-			case system.TypeVarlena:
-				// TODO:
-			case system.TypeCString:
-				// TODO:
 			}
 		}
 
