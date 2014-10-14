@@ -100,6 +100,22 @@ func (htup *HeapTupleHeader) Oid() system.Oid {
 	return system.InvalidOid
 }
 
+func (htup *HeapTupleHeader) HasNulls() bool {
+	return htup.infomask & heapHasNull != 0
+}
+
+func (htup *HeapTupleHeader) IsNull(attnum system.AttrNumber) bool {
+	if htup.HasNulls() {
+		// TODO: maybe bytes should be with HeapTupleHeader.
+		ptr := uintptr(unsafe.Pointer(&htup.bits))
+		ptr += uintptr(((attnum) - 1) >> 3)
+		bit := *(*byte)(unsafe.Pointer(ptr))
+		// TODO: need bitmap accessor
+		return (bit & byte(1 << (uint(attnum-1) & 0x07))) == 0
+	}
+	return false
+}
+
 func (htup *HeapTupleHeader) Natts() system.AttrNumber {
 	return system.AttrNumber(htup.infomask2 & uint16(heapNattsMask))
 }
@@ -128,9 +144,17 @@ func (tuple *HeapTuple) Fetch(attnum system.AttrNumber) system.Datum {
 		}
 	} else {
 		td := tuple.data
+
+		if td.IsNull(attnum) {
+			return nil
+		}
+
 		offset := int(td.hoff)
 		// TODO: null bitmap
 		for i := system.AttrNumber(1); i < attnum; i++ {
+			if td.IsNull(i) {
+				continue
+			}
 			attr := tuple.tupdesc.Attrs[i-1]
 			if attr.Type.IsVarlen() {
 				// TODO:
