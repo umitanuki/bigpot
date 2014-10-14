@@ -7,10 +7,16 @@ import (
 var ClassRelId system.Oid = 1259
 var ClassTupleDesc = &TupleDesc{
 	Attrs: []*Attribute{
-		{"relname", system.NameType},
-		{"relfilenode", system.OidType},
+		{
+			Name:   "relname",
+			TypeId: system.NameType,
+		},
+		{
+			Name:   "relfilenode",
+			TypeId: system.OidType,
+		},
 	},
-	typid: ClassRelId,
+	typid:  ClassRelId,
 	hasOid: true,
 }
 
@@ -22,12 +28,24 @@ const (
 var AttributeRelId system.Oid = 1249
 var AttributeTupleDesc = &TupleDesc{
 	Attrs: []*Attribute{
-		{"attrelid", system.OidType},
-		{"attname", system.NameType},
-		{"attnum", system.Int4Type},
-		{"atttypid", system.OidType},
+		{
+			Name:   "attrelid",
+			TypeId: system.OidType,
+		},
+		{
+			Name:   "attname",
+			TypeId: system.NameType,
+		},
+		{
+			Name:   "attnum",
+			TypeId: system.Int4Type,
+		},
+		{
+			Name:   "atttypid",
+			TypeId: system.OidType,
+		},
 	},
-	typid: AttributeRelId,
+	typid:  AttributeRelId,
 	hasOid: false,
 }
 
@@ -37,3 +55,14 @@ const (
 	Anum_attribute_attnum   = 3
 	Anum_attribute_atttypid = 4
 )
+
+func initTupleDesc(tupdesc *TupleDesc) {
+	for _, attr := range tupdesc.Attrs {
+		attr.Type = system.TypeRegistry[attr.TypeId]
+	}
+}
+
+func init() {
+	initTupleDesc(ClassTupleDesc)
+	initTupleDesc(AttributeTupleDesc)
+}

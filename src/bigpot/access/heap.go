@@ -54,7 +54,7 @@ func HeapOpen(relid system.Oid) (*HeapRelation, error) {
 	class_tuple, err := class_scan.Next()
 	relation := &HeapRelation{
 		RelId:   relid,
-		RelName: class_tuple.Get(Anum_class_relname).(system.Name),
+		RelName: class_tuple.Fetch(Anum_class_relname).(system.Name),
 	}
 
 	attr_rel, err := HeapOpen(AttributeRelId)
@@ -80,9 +80,11 @@ func HeapOpen(relid system.Oid) (*HeapRelation, error) {
 		if err != nil {
 			break
 		}
+		typid := attr_tuple.Fetch(Anum_attribute_atttypid).(system.Oid)
 		attribute := &Attribute{
-			AttName: attr_tuple.Get(Anum_attribute_attname).(system.Name),
-			AttType: attr_tuple.Get(Anum_attribute_atttypid).(system.Oid),
+			Name:   attr_tuple.Fetch(Anum_attribute_attname).(system.Name),
+			TypeId: typid,
+			Type:   system.TypeRegistry[typid],
 		}
 		attributes = append(attributes, attribute)
 	}

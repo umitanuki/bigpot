@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"unsafe"
 )
 
 const BlockSize = 4 * 1024
@@ -41,21 +42,21 @@ type ItemPointer struct {
 
 var InvalidItemPointer = ItemPointer{InvalidBlockNumber, InvalidOffsetNumber}
 
-func (itemptr *ItemPointer) ToString() string {
+func (itemptr ItemPointer) ToString() string {
 	return fmt.Sprintf("(%d,%d)", itemptr.block, itemptr.offset)
 }
 
-func (itemptr *ItemPointer) FromString(str string) (Datum, error) {
+func (itemptr ItemPointer) FromString(str string) (Datum, error) {
 	var newval ItemPointer
 	num, err := fmt.Sscanf(str, "(%d,%d)", &newval.block, &newval.offset)
 
 	if err != nil || num != 2 {
 		return nil, Ereport(InvalidTextRepresentation, "invalid syntax for tid")
 	}
-	return Datum(&newval), nil
+	return Datum(newval), nil
 }
 
-func (itemptr *ItemPointer) ToBytes(writer io.Writer) (int, error) {
+func (itemptr ItemPointer) ToBytes(writer io.Writer) (int, error) {
 	if err := binary.Write(writer, binary.LittleEndian, itemptr.block); err != nil {
 		return 0, err
 	}
@@ -65,7 +66,7 @@ func (itemptr *ItemPointer) ToBytes(writer io.Writer) (int, error) {
 	return itemptr.Len(), nil
 }
 
-func (itemptr *ItemPointer) FromBytes(reader io.Reader) Datum {
+func (itemptr ItemPointer) FromBytes(reader io.Reader) Datum {
 	var newval ItemPointer
 	if err := binary.Read(reader, binary.LittleEndian, &newval.block); err != nil {
 		panic("read error")
@@ -73,17 +74,16 @@ func (itemptr *ItemPointer) FromBytes(reader io.Reader) Datum {
 	if err := binary.Read(reader, binary.LittleEndian, &newval.offset); err != nil {
 		panic("read error")
 	}
-	return Datum(&newval)
+	return Datum(newval)
 }
 
-func (itemptr *ItemPointer) Equals(other Datum) bool {
-	if oval, ok := other.(*ItemPointer); ok {
+func (itemptr ItemPointer) Equals(other Datum) bool {
+	if oval, ok := other.(ItemPointer); ok {
 		return itemptr.block == oval.block && itemptr.offset == oval.offset
 	}
 	return false
 }
 
-func (itemptr *ItemPointer) Len() int {
-	// sizeof(BlockNumber) + sizeof(OffsetNumber)
-	return 6
+func (itemptr ItemPointer) Len() int {
+	return int(unsafe.Sizeof(itemptr))
 }

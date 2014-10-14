@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"io"
 	"strconv"
+	"unsafe"
 )
 
 type Name string
@@ -37,16 +38,59 @@ type Datum interface {
 	Len() int
 }
 
-var TypeRegistry = map[Oid]Datum{
-	OidType:  Oid(0),
-	Int4Type: Int4(0),
-	TidType:  &ItemPointer{0, 0},
-	NameType: Name(""),
+type TypeInfo struct {
+	Id   Oid
+	Name Name
+	Len  int16
+	Zero Datum
+}
+
+var TypeRegistry = map[Oid]*TypeInfo{
+	OidType: &TypeInfo{
+		Id:   OidType,
+		Name: Name("oid"),
+		Len:  int16(unsafe.Sizeof(Oid(0))),
+		Zero: Oid(0),
+	},
+	Int4Type: &TypeInfo{
+		Id:   Int4Type,
+		Name: Name("int4"),
+		Len:  int16(unsafe.Sizeof(Int4(0))),
+		Zero: Int4(0),
+	},
+	TidType: &TypeInfo{
+		Id:   TidType,
+		Name: Name("tid"),
+		Len:  int16(unsafe.Sizeof(ItemPointer{0, 0})),
+		Zero: ItemPointer{0, 0},
+	},
+	NameType: &TypeInfo{
+		Id:   NameType,
+		Name: Name("name"),
+		Len:  NameLen,
+		Zero: Name(""),
+	},
+}
+
+const (
+	TypeFixed   = iota
+	TypeVarlena = iota
+	TypeCString = iota
+)
+
+func (typ *TypeInfo) Category() int {
+	if typ.Len == -2 {
+		return TypeCString
+	} else if typ.Len == -1 {
+		return TypeVarlena
+	} else {
+		return TypeFixed
+	}
 }
 
 func DatumFromString(str string, typid Oid) (Datum, error) {
 	if entry, ok := TypeRegistry[typid]; ok {
-		return entry.FromString(str)
+		return entry.Zero.FromString(str)
 	}
 
 	panic("unknown type")
@@ -54,7 +98,7 @@ func DatumFromString(str string, typid Oid) (Datum, error) {
 
 func DatumFromBytes(reader io.Reader, typid Oid) Datum {
 	if entry, ok := TypeRegistry[typid]; ok {
-		return entry.FromBytes(reader)
+		return entry.Zero.FromBytes(reader)
 	}
 
 	panic("unknown type")

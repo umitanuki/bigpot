@@ -14,12 +14,13 @@ type Scan interface {
 }
 
 type Tuple interface {
-	Get(attnum system.AttrNumber) system.Datum
+	Fetch(attnum system.AttrNumber) system.Datum
 }
 
 type Attribute struct {
-	AttName system.Name
-	AttType system.Oid
+	Name   system.Name
+	TypeId system.Oid
+	Type   *system.TypeInfo
 }
 
 type TupleDesc struct {

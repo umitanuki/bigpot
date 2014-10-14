@@ -10,6 +10,7 @@ import (
 type HeapTuple struct {
 	tableOid system.Oid
 	self     system.ItemPointer
+	tupdesc  *TupleDesc
 	bytes    []byte
 	data     *HeapTupleHeader
 }
@@ -52,14 +53,15 @@ const (
 	heapXactMask       = 0xfff0
 
 	// information stored in infomask2
-	heapNattsMask      = 0x07ff
+	heapNattsMask = 0x07ff
 )
 
-func NewHeapTuple(bytes []byte, tid system.ItemPointer) *HeapTuple {
+func NewHeapTuple(bytes []byte, tupdesc *TupleDesc, tid system.ItemPointer) *HeapTuple {
 	tuple := &HeapTuple{
-		self:  tid,
-		bytes: bytes,
-		data:  (*HeapTupleHeader)(unsafe.Pointer(&bytes[0])),
+		self:    tid,
+		tupdesc: tupdesc,
+		bytes:   bytes,
+		data:    (*HeapTupleHeader)(unsafe.Pointer(&bytes[0])),
 	}
 	return tuple
 }
@@ -106,11 +108,11 @@ func (htup *HeapTupleHeader) SetNatts(attnum system.AttrNumber) {
 	htup.infomask2 = (htup.infomask2 & ^uint16(heapNattsMask)) | uint16(attnum)
 }
 
-func (tuple *HeapTuple) Get(attnum system.AttrNumber) system.Datum {
+func (tuple *HeapTuple) Fetch(attnum system.AttrNumber) system.Datum {
 	if attnum <= 0 {
 		switch attnum {
 		case system.CtidAttrNumber:
-			return system.Datum(&tuple.self)
+			return system.Datum(tuple.self)
 		case system.OidAttrNumber:
 			return system.Datum(tuple.data.Oid())
 		case system.XminAttrNumber:
@@ -125,7 +127,23 @@ func (tuple *HeapTuple) Get(attnum system.AttrNumber) system.Datum {
 			return system.Datum(tuple.tableOid)
 		}
 	} else {
+		td := tuple.data
+		offset := int(td.hoff)
+		// TODO: null bitmap
+		for i := system.AttrNumber(1); i < attnum; i++ {
+			attr := tuple.tupdesc.Attrs[i-1]
+			switch attr.Type.Category() {
+			case system.TypeFixed:
+				offset += int(attr.Type.Len)
+			case system.TypeVarlena:
+				// TODO:
+			case system.TypeCString:
+				// TODO:
+			}
+		}
 
+		reader := bytes.NewReader(tuple.bytes[offset:])
+		return system.DatumFromBytes(reader, tuple.tupdesc.Attrs[attnum-1].TypeId)
 	}
 
 	return nil
@@ -145,7 +163,8 @@ func computeHeapDataSize(values []system.Datum, tupdesc *TupleDesc) uintptr {
 			continue
 		}
 
-		// TODO:
+		// TODO: varlena
+		data_length += uintptr(val.Len())
 	}
 
 	return data_length
@@ -187,8 +206,8 @@ func FormHeapTuple(values []system.Datum, tupdesc *TupleDesc) *HeapTuple {
 	for _, value := range values {
 		if value == nil {
 			hasnull = true
-		//} else if att.attlen == -1
-		// TODO: flatten toast value
+			//} else if att.attlen == -1
+			// TODO: flatten toast value
 		}
 	}
 
@@ -208,8 +227,11 @@ func FormHeapTuple(values []system.Datum, tupdesc *TupleDesc) *HeapTuple {
 	length += data_len
 
 	tuple_data := make([]byte, length)
-	tuple := NewHeapTuple(tuple_data, system.InvalidItemPointer)
-	tuple.SetTableOid(system.InvalidOid)
+	tuple := &HeapTuple{
+		tupdesc:  tupdesc,
+		tableOid: system.InvalidOid,
+	}
+	tuple.SetData(tuple_data, system.InvalidItemPointer)
 
 	td := tuple.data
 	td.SetNatts(system.AttrNumber(natts))
@@ -221,7 +243,7 @@ func FormHeapTuple(values []system.Datum, tupdesc *TupleDesc) *HeapTuple {
 
 	bits := []byte(nil)
 	if hasnull {
-		bits = tuple.bytes[unsafe.Offsetof(td.bits):hoff-1]
+		bits = tuple.bytes[unsafe.Offsetof(td.bits) : hoff-1]
 	}
 	data := tuple.bytes[hoff:]
 	td.fill(values, tupdesc, bits, data)
