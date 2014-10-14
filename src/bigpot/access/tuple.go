@@ -2,6 +2,7 @@ package access
 
 import (
 	"bytes"
+	"errors"
 	"unsafe"
 
 	"bigpot/system"
@@ -101,7 +102,7 @@ func (htup *HeapTupleHeader) Oid() system.Oid {
 }
 
 func (htup *HeapTupleHeader) HasNulls() bool {
-	return htup.infomask & heapHasNull != 0
+	return htup.infomask&heapHasNull != 0
 }
 
 func (htup *HeapTupleHeader) IsNull(attnum system.AttrNumber) bool {
@@ -111,7 +112,7 @@ func (htup *HeapTupleHeader) IsNull(attnum system.AttrNumber) bool {
 		ptr += uintptr(((attnum) - 1) >> 3)
 		bit := *(*byte)(unsafe.Pointer(ptr))
 		// TODO: need bitmap accessor
-		return (bit & byte(1 << (uint(attnum-1) & 0x07))) == 0
+		return (bit & byte(1<<(uint(attnum-1)&0x07))) == 0
 	}
 	return false
 }
@@ -149,8 +150,8 @@ func (tuple *HeapTuple) Fetch(attnum system.AttrNumber) system.Datum {
 			return nil
 		}
 
+		// TODO: attcache
 		offset := int(td.hoff)
-		// TODO: null bitmap
 		for i := system.AttrNumber(1); i < attnum; i++ {
 			if td.IsNull(i) {
 				continue
@@ -191,13 +192,27 @@ func computeHeapDataSize(values []system.Datum, tupdesc *TupleDesc) uintptr {
 	return data_length
 }
 
+// bytesWriter implements Writer interface over existing []byte.
+// This is different from bytes.Buffer in that it writes into the given buffer.
+type bytesWriter []byte
+
+// Implements Writer.Write().
+func (writer *bytesWriter) Write(b []byte) (int, error) {
+	n := copy(*writer, b)
+	if n < len(b) {
+		return n, errors.New("not enough bytes")
+	}
+	*writer = (*writer)[n:]
+	return n, nil
+}
+
 func (htup *HeapTupleHeader) fill(values []system.Datum, tupdesc *TupleDesc, bits, data []byte) {
 	htup.infomask &= ^uint16(heapHasNull | heapHasVarWidth | heapHasExternal)
 
 	bitIndex := -1
 	highBit := byte(0x80)
 	bitmask := highBit
-	writer := bytes.NewBuffer(data)
+	writer := (*bytesWriter)(&data)
 	for i := 0; i < len(tupdesc.Attrs); i++ {
 		if bits != nil {
 			if bitmask != highBit {
@@ -264,7 +279,7 @@ func FormHeapTuple(values []system.Datum, tupdesc *TupleDesc) *HeapTuple {
 
 	bits := []byte(nil)
 	if hasnull {
-		bits = tuple.bytes[unsafe.Offsetof(td.bits) : hoff-1]
+		bits = tuple.bytes[unsafe.Offsetof(td.bits):hoff]
 	}
 	data := tuple.bytes[hoff:]
 	td.fill(values, tupdesc, bits, data)
