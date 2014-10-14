@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+count=`git ls-files | grep '.go$' | xargs gofmt -l | wc -l`
+if [ $count -gt 0 ]; then
+echo "Some files aren't formatted.  hint: go fmt"
+exit 1
+fi
+exit 0
