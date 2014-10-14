@@ -31,6 +31,7 @@ var XidType Oid = 28
 type Datum interface {
 	ToString() string
 	FromString(str string) (Datum, error)
+	ToBytes(writer io.Writer) (int, error)
 	FromBytes(reader io.Reader) Datum
 	Equals(other Datum) bool
 	Len() int
@@ -68,6 +69,12 @@ func (val Name) FromString(str string) (Datum, error) {
 		return nil, Ereport(InvalidTextRepresentation, "value too long")
 	}
 	return Datum(Name(str)), nil
+}
+
+func (val Name) ToBytes(writer io.Writer) (int, error) {
+	b := make([]byte, NameLen)
+	copy(b, []byte(val))
+	return writer.Write(b)
 }
 
 func (val Name) FromBytes(reader io.Reader) Datum {
@@ -109,6 +116,11 @@ func (val Oid) FromString(str string) (Datum, error) {
 	return Datum(Oid(num)), nil
 }
 
+func (val Oid) ToBytes(writer io.Writer) (int, error) {
+	err := binary.Write(writer, binary.LittleEndian, val)
+	return val.Len(), err
+}
+
 func (val Oid) FromBytes(reader io.Reader) Datum {
 	var newval Oid
 	if err := binary.Read(reader, binary.LittleEndian, &newval); err != nil {
@@ -139,6 +151,11 @@ func (val Int4) FromString(str string) (Datum, error) {
 		return nil, Ereport(InvalidTextRepresentation, "%s", err2.Err)
 	}
 	return Datum(Int4(num)), nil
+}
+
+func (val Int4) ToBytes(writer io.Writer) (int, error) {
+	err := binary.Write(writer, binary.LittleEndian, val)
+	return val.Len(), err
 }
 
 func (val Int4) FromBytes(reader io.Reader) Datum {

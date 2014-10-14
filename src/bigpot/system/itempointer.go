@@ -55,6 +55,16 @@ func (itemptr *ItemPointer) FromString(str string) (Datum, error) {
 	return Datum(&newval), nil
 }
 
+func (itemptr *ItemPointer) ToBytes(writer io.Writer) (int, error) {
+	if err := binary.Write(writer, binary.LittleEndian, itemptr.block); err != nil {
+		return 0, err
+	}
+	if err := binary.Write(writer, binary.LittleEndian, itemptr.offset); err != nil {
+		return 0, err
+	}
+	return itemptr.Len(), nil
+}
+
 func (itemptr *ItemPointer) FromBytes(reader io.Reader) Datum {
 	var newval ItemPointer
 	if err := binary.Read(reader, binary.LittleEndian, &newval.block); err != nil {

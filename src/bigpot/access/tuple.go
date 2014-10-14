@@ -1,6 +1,7 @@
 package access
 
 import (
+	"bytes"
 	"unsafe"
 
 	"bigpot/system"
@@ -109,7 +110,7 @@ func (tuple *HeapTuple) Get(attnum system.AttrNumber) system.Datum {
 	if attnum <= 0 {
 		switch attnum {
 		case system.CtidAttrNumber:
-			//return system.Datum(tuple.self)
+			return system.Datum(&tuple.self)
 		case system.OidAttrNumber:
 			return system.Datum(tuple.data.Oid())
 		case system.XminAttrNumber:
@@ -150,8 +151,34 @@ func computeHeapDataSize(values []system.Datum, tupdesc *TupleDesc) uintptr {
 	return data_length
 }
 
-func (htup *HeapTupleHeader) fill(values []system.Datum, tupdesc *TupleDesc) {
+func (htup *HeapTupleHeader) fill(values []system.Datum, tupdesc *TupleDesc, bits, data []byte) {
+	htup.infomask &= ^uint16(heapHasNull | heapHasVarWidth | heapHasExternal)
 
+	bitIndex := -1
+	highBit := byte(0x80)
+	bitmask := highBit
+	writer := bytes.NewBuffer(data)
+	for i := 0; i < len(tupdesc.Attrs); i++ {
+		if bits != nil {
+			if bitmask != highBit {
+				bitmask <<= 1
+			} else {
+				bitIndex++
+				bits[bitIndex] = 0
+				bitmask = 1
+			}
+
+			if values[i] == nil {
+				htup.infomask |= uint16(heapHasNull)
+				continue
+			}
+			bits[bitIndex] |= bitmask
+		}
+
+		// no alignment for now
+		// TODO: set infomask with varsize
+		values[i].ToBytes(writer)
+	}
 }
 
 func FormHeapTuple(values []system.Datum, tupdesc *TupleDesc) *HeapTuple {
@@ -192,7 +219,12 @@ func FormHeapTuple(values []system.Datum, tupdesc *TupleDesc) *HeapTuple {
 		td.infomask = heapHasOid
 	}
 
-	td.fill(values, tupdesc)
+	bits := []byte(nil)
+	if hasnull {
+		bits = tuple.bytes[unsafe.Offsetof(td.bits):hoff-1]
+	}
+	data := tuple.bytes[hoff:]
+	td.fill(values, tupdesc, bits, data)
 
 	return tuple
 }
