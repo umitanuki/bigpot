@@ -22,24 +22,24 @@ type pageHeader struct {
 const sizeOfPageHeader = uint16(unsafe.Offsetof(pageHeader{}.linp))
 const LayoutVersion = uint16(4)
 
-// pageHeader.flags contains the following flag bits.  Undefined bits are initialized
+// _PageHeader.flags contains the following flag bits.  Undefined bits are initialized
 // to zero and may be used in the future.
 //
-// pageHasFreeLines is set if there are any itemIdUnused line pointers before
+// _PageHasFreeLines is set if there are any itemIdUnused line pointers before
 // lower.  This should be considered a hint rather than the truth, since
 // changes to it are not WAL-logged.
 //
-// pageFull is set if an UPDATE doesn't find enough free space in the
+// _PageFull is set if an UPDATE doesn't find enough free space in the
 // page for its new tuple version; this suggests that a prune is needed.
 // Again, this is just a hint.
 const (
-	pageHasFreeLines  = uint16(0x0001)
-	pageFull          = uint16(0x0002)
-	pageAllVisible    = uint16(0x0004)
-	pageValidFlagBits = uint16(0x0007)
+	_PageHasFreeLines  = uint16(0x0001)
+	_PageFull          = uint16(0x0002)
+	_PageAllVisible    = uint16(0x0004)
+	_PageValidFlagBits = uint16(0x0007)
 )
 
-var pageZero = make([]byte, system.BlockSize)
+var _PageZero = make([]byte, system.BlockSize)
 
 // A postgres disk page is an abstraction layered on top of a postgres
 // disk block (which is simply a unit of i/o, see block.h).
@@ -92,10 +92,10 @@ var pageZero = make([]byte, system.BlockSize)
 // fields.
 type Page struct {
 	header *pageHeader
-	bytes  []byte
+	bytes  *Block
 }
 
-func NewPage(b []byte) *Page {
+func NewPage(b *Block) *Page {
 	if len(b) != system.BlockSize {
 		panic("invalid block bytes")
 	}
@@ -123,39 +123,39 @@ func (page *Page) SetFlags(flags uint16) {
 }
 
 func (page *Page) HasFreeLinePointers() bool {
-	return (page.header.flags & pageHasFreeLines) != 0
+	return (page.header.flags & _PageHasFreeLines) != 0
 }
 
 func (page *Page) SetHasFreeLinePointers() {
-	page.header.flags |= pageHasFreeLines
+	page.header.flags |= _PageHasFreeLines
 }
 
 func (page *Page) ClearHasFreeLinePointers() {
-	page.header.flags &= ^pageHasFreeLines
+	page.header.flags &= ^_PageHasFreeLines
 }
 
 func (page *Page) IsFull() bool {
-	return (page.header.flags & pageFull) != 0
+	return (page.header.flags & _PageFull) != 0
 }
 
 func (page *Page) SetFull() {
-	page.header.flags |= pageFull
+	page.header.flags |= _PageFull
 }
 
 func (page *Page) ClearFull() {
-	page.header.flags &= ^pageFull
+	page.header.flags &= ^_PageFull
 }
 
 func (page *Page) IsAllVisible() bool {
-	return (page.header.flags & pageAllVisible) != 0
+	return (page.header.flags & _PageAllVisible) != 0
 }
 
 func (page *Page) SetAllVisible() {
-	page.header.flags |= pageAllVisible
+	page.header.flags |= _PageAllVisible
 }
 
 func (page *Page) ClearAllVisible() {
-	page.header.flags &= ^pageAllVisible
+	page.header.flags &= ^_PageAllVisible
 }
 
 func (page *Page) IsPrunable(oldestxmin system.Xid) bool {
@@ -249,7 +249,7 @@ func (page *Page) MaxOffsetNumber() system.OffsetNumber {
 
 // Initializes the content of a page.
 func (page *Page) Init(specialSize uintptr) {
-	copy(page.bytes, pageZero)
+	copy(page.bytes[:], _PageZero)
 
 	specialSize = system.MaxAlign(specialSize)
 	offsetSpecial := uint16(system.BlockSize - specialSize)
