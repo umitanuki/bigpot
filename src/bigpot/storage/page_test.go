@@ -1,7 +1,6 @@
 package storage
 
 import (
-	//"bytes"
 	. "launchpad.net/gocheck"
 	"os"
 	"testing"
@@ -19,7 +18,7 @@ type MySuite struct{}
 var _ = Suite(&MySuite{})
 
 func (s *MySuite) TestPage(c *C) {
-	b := make([]byte, system.BlockSize)
+	b := new(Block)
 	page := NewPage(b)
 
 	c.Check(page.IsNew(), Equals, true)
@@ -40,12 +39,12 @@ func (s *MySuite) TestPage(c *C) {
 	c.Check(page.IsNew(), Equals, false)
 
 	fout, _ := os.Create("/tmp/foo")
-	fout.Write(b)
+	fout.Write(b[:])
 	fout.Close()
 
 	fin, _ := os.Open("/tmp/foo")
-	b2 := make([]byte, system.BlockSize)
-	fin.Read(b2)
+	b2 := new(Block)
+	fin.Read(b2[:])
 	fin.Close()
 	page2 := NewPage(b2)
 
@@ -57,7 +56,7 @@ func (s *MySuite) TestPage(c *C) {
 
 	// Test for Add/Item
 	// TODO: overwrite case
-	page3 := NewPage(make([]byte, system.BlockSize))
+	page3 := NewPage(new(Block))
 	page3.Init(0)
 	item1 := make([]byte, 128)
 	item1[0] = 0xbe

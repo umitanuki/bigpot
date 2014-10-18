@@ -66,7 +66,7 @@ type bufferDesc struct {
 
 var _ZeroBlock = make([]byte, system.BlockSize)
 
-const NewBlock = 0
+const NewBlock = system.InvalidBlockNumber
 const _MaxUsageCount = 10
 
 // Allocates a new BufferManager, with the number of buffer nBuffers.
@@ -80,7 +80,9 @@ func NewBufferManager(nBuffers int) BufferManager {
 		nextVictim:  0,
 	}
 	mgr.smgr = NewMdSmgr()
-	for i, bufDesc := range mgr.descriptors {
+	// notice: range loop doesn't work because its a non-pointer slice.
+	for i := 0; i < nBuffers; i++ {
+		bufDesc := &mgr.descriptors[i]
 		bufDesc.buffer = &mgr.pool[i]
 	}
 	go mgr.ioRoutine()
