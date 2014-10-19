@@ -64,7 +64,7 @@ func (md *mdRelation) openFile() error {
 	// TODO: do we care concurrency?
 	if md.file == nil {
 		relpath := system.RelPath(md.node)
-		file, err := os.Open(relpath)
+		file, err := os.OpenFile(relpath, os.O_RDWR, 0600)
 		if err != nil {
 			md.file = nil
 			return err
@@ -79,6 +79,7 @@ func (md *mdRelation) Read(blockNum system.BlockNumber, data *Block) error {
 	if err := md.openFile(); err != nil {
 		return err
 	}
+	defer md.Close()
 
 	pos := int64(blockNum * system.BlockSize)
 	if _, err := md.file.Seek(pos, os.SEEK_SET); err != nil {
@@ -96,6 +97,8 @@ func (md *mdRelation) Write(blockNum system.BlockNumber, data *Block) error {
 	if err := md.openFile(); err != nil {
 		return err
 	}
+	// TODO:
+	defer md.Close()
 
 	pos := int64(blockNum * system.BlockSize)
 	if _, err := md.file.Seek(pos, os.SEEK_SET); err != nil {
@@ -113,9 +116,10 @@ func (md *mdRelation) Extend(blockNum system.BlockNumber, data *Block) error {
 	if err := md.openFile(); err != nil {
 		return err
 	}
+	defer md.Close()
 
 	pos := int64(blockNum * system.BlockSize)
-	if posres, err := md.file.Seek(0, os.SEEK_SET); err != nil {
+	if posres, err := md.file.Seek(0, os.SEEK_END); err != nil {
 		return err
 	} else if posres != pos {
 		return fmt.Errorf("could not seek to block %d", blockNum)
@@ -131,5 +135,6 @@ func (md *mdRelation) Extend(blockNum system.BlockNumber, data *Block) error {
 func (md *mdRelation) Close() {
 	if md.file != nil {
 		md.file.Close()
+		md.file = nil
 	}
 }

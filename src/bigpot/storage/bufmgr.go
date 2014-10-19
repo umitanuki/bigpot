@@ -22,6 +22,7 @@ type Buffer interface {
 	RLock()
 	Unlock()
 	GetPage() *Page
+	MarkDirty()
 }
 
 type bufferTag struct {
@@ -64,9 +65,14 @@ type bufferDesc struct {
 	isDirty bool
 }
 
+// A byte slice with BlockSize zeros.  Used to initialize blocks.
 var _ZeroBlock = make([]byte, system.BlockSize)
 
 const NewBlock = system.InvalidBlockNumber
+
+// The maximum usage count for the clock sweep algorithm.  This is set
+// a little higher than postgres, because we always bump up usageCount
+// even if the same backend acquires the buffer.
 const _MaxUsageCount = 10
 
 // Allocates a new BufferManager, with the number of buffer nBuffers.
@@ -90,12 +96,17 @@ func NewBufferManager(nBuffers int) BufferManager {
 	return BufferManager(mgr)
 }
 
+// Implements BufferManager.ReadBuffer.  Upon return, the returned buffer
+// is guaranteed to be pinned, until the caller releases the buffer.
 func (mgr *bufMgr) ReadBuffer(reln system.RelFileNode, block system.BlockNumber) (Buffer, error) {
 	resChan := make(chan readBufferRes)
 	readParam := readBufferReq{
 		bufferTag{reln, block}, resChan,
 	}
 
+	// Different from postgres, this implementation (for now) is serialized
+	// so that the logic is simplified.  Will see how it is comparable to
+	// the postgres' complex concurrent logic.
 	// send a request
 	mgr.readChan <- readParam
 
@@ -111,6 +122,7 @@ func (mgr *bufMgr) ReleaseBuffer(buf Buffer) {
 	mgr.releaseChan <- bufDesc
 }
 
+// This is a background workhose goroutine that performs requested tasks.
 func (mgr *bufMgr) ioRoutine() {
 	for {
 		select {
@@ -127,10 +139,21 @@ func (mgr *bufMgr) ioRoutine() {
 
 func (mgr *bufMgr) writeBuffer(buf *bufferDesc) error {
 	smgr := mgr.smgr.GetRelation(buf.tag.reln)
-	return smgr.Write(buf.tag.block, buf.buffer)
+	err := smgr.Write(buf.tag.block, buf.buffer)
+	if err != nil {
+		return err
+	}
+	buf.isDirty = false
+	return err
 }
 
+// Returns a free buffer that is not used.
 func (mgr *bufMgr) getUnusedBuffer() (*bufferDesc, error) {
+	// We currently implement only clock sweep part
+	// without free list, since clock sweep can return
+	// free buffer anyway.  Free list might help some
+	// performance gain, though.
+
 	// run clock sweep
 	nTry := len(mgr.pool)
 	for nTry > 0 {
@@ -144,6 +167,7 @@ func (mgr *bufMgr) getUnusedBuffer() (*bufferDesc, error) {
 				// TODO: atomic
 				buf.usageCount--
 			} else {
+				// Return buffer only if it's unpinned and least used.
 				return buf, nil
 			}
 		} else {
@@ -154,8 +178,15 @@ func (mgr *bufMgr) getUnusedBuffer() (*bufferDesc, error) {
 	return nil, fmt.Errorf("no unpinned buffers available")
 }
 
+// Lookup the buffer table or re-useable list, and return it if found.
+// The returned buffer is pinned and is already marked as holding the
+// desired page.  If it already did have the desired page, "found" is
+// set true.  Otherwise, "found" is set false, and the caller needs to do
+// I/O to fill it.  "found" is redundant with buffer's isValid.
 func (mgr *bufMgr) allocBuffer(tag bufferTag) (*bufferDesc, bool, error) {
 	if buf, found := mgr.lookup[tag]; found {
+		// Found it in the hash table.  Now, pin the buffer so no one can
+		// steal it from buffer pool.
 		buf.pin()
 
 		return buf, found, nil
@@ -168,6 +199,7 @@ func (mgr *bufMgr) allocBuffer(tag bufferTag) (*bufferDesc, bool, error) {
 	buf.pin()
 
 	if buf.isDirty {
+		// If the buffer was dirty, try to write it out.
 		if err := mgr.writeBuffer(buf); err != nil {
 			return nil, false, err
 		}
@@ -184,43 +216,68 @@ func (mgr *bufMgr) allocBuffer(tag bufferTag) (*bufferDesc, bool, error) {
 	buf.isDirty = false
 	buf.isTagValid = true
 
-	// reset usage count, as we renamed the buffer.
+	// reset usage count, as we renamed the buffer.  (The usageCount starts
+	// out at 1 so that the buffer can survive one clock-sweep pass.)
 	buf.usageCount = 1
 
 	return buf, false, nil
 }
 
+// The main task of ReadBuffer.  This is simplified under the assumption
+// that no concurrent access to the shared extent is happening, and made
+// much similar to what postgres has as local buffers.
 func (mgr *bufMgr) readBufferInternal(tag bufferTag) (*bufferDesc, error) {
 	blockNum := tag.block
 
 	smgr := mgr.smgr.GetRelation(tag.reln)
 
 	isExtend := blockNum == NewBlock
+
+	// Substitute proper block number if called asked
 	if isExtend {
-		blockNum, err := smgr.NBlocks()
+		bnum, err := smgr.NBlocks()
 		if err != nil {
 			return nil, err
 		}
-		tag.block = blockNum
+		tag.block = bnum
+		blockNum = bnum
 	}
+
+	// lookup the buffer.
 	buf, found, err := mgr.allocBuffer(tag)
 	if err != nil {
 		return nil, err
 	}
 
+	// if it was already in the buffer pool, we're done
 	if found {
 		if !isExtend {
 			return buf, nil
 		}
+		// TODO: not sure if this occurs...
 
 		buf.isValid = false
 	}
 
+	// We have allocated a buffer for the page but its contents are
+	// not yet valid.
 	if isExtend {
+		// new buffers are zero-filled
 		copy(buf.buffer[:], _ZeroBlock)
-		smgr.Extend(blockNum, buf.buffer)
+		if err := smgr.Extend(blockNum, buf.buffer); err != nil {
+			buf.unpin()
+			buf.isValid = false
+			delete(mgr.lookup, tag)
+			return nil, err
+		}
 	} else {
-		smgr.Read(blockNum, buf.buffer)
+		// Read in the page.  We may want to make this async I/O later.
+		if err := smgr.Read(blockNum, buf.buffer); err != nil {
+			buf.unpin()
+			buf.isValid = false
+			delete(mgr.lookup, tag)
+			return nil, err
+		}
 	}
 
 	buf.isValid = true
@@ -240,6 +297,10 @@ func (buf *bufferDesc) IsValid() bool {
 
 func (buf *bufferDesc) GetPage() *Page {
 	return NewPage(buf.buffer)
+}
+
+func (buf *bufferDesc) MarkDirty() {
+	buf.isDirty = true
 }
 
 func (buf *bufferDesc) pin() {
