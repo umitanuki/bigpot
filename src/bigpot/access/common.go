@@ -5,6 +5,7 @@ import (
 )
 
 type Relation interface {
+	BeginScan() (Scan, error)
 	Close() error
 }
 

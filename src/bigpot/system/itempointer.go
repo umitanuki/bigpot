@@ -87,3 +87,15 @@ func (itemptr ItemPointer) Equals(other Datum) bool {
 func (itemptr ItemPointer) Len() int {
 	return int(unsafe.Sizeof(itemptr))
 }
+
+func MakeItemPointer(block BlockNumber, offset OffsetNumber) ItemPointer {
+	return ItemPointer{block, offset}
+}
+
+func (itemptr ItemPointer) BlockNumber() BlockNumber {
+	return itemptr.block
+}
+
+func (itemptr ItemPointer) OffsetNumber() OffsetNumber {
+	return itemptr.offset
+}
